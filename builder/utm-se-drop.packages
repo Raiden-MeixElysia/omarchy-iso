@@ -1,9 +1,16 @@
-# Base packages the appliance leaves out: desktop apps too heavy for an interpreted guest, tools with no aarch64 build, and hardware-only helpers.
+# Base packages the appliance leaves out: apps and toolchains too heavy for an interpreted guest, tools with no aarch64 build, and helpers for hardware the guest has not.
+aether
 asdcontrol
+clang
+docker-buildx
+docker-compose
 gpu-screen-recorder
 hyprland-preview-share-picker
 kdenlive
+lazydocker
 libreoffice-fresh
+llvm
 localsend
 moonlight-qt
 xournalpp
+yay

@@ -180,6 +180,8 @@ version=$(arch-chroot "$TARGET" pacman -Q omarchy-dev | cut -d' ' -f2)
 : >"$TARGET/etc/machine-id"
 rm -f "$TARGET"/etc/ssh/ssh_host_* "$TARGET/root/.bash_history"
 rm -rf "$TARGET"/var/cache/pacman/pkg/*
+# Freed blocks still hold old bytes; trimming zeroes them so they compress to nothing.
+fstrim "$TARGET" && fstrim "$TARGET/boot"
 
 echo "==> Checking the sealed image"
 [[ ! -s $TARGET/etc/machine-id ]]
@@ -199,5 +201,5 @@ losetup -d "$loop"
 loop=""
 
 echo "==> Writing the compressed disk"
-qemu-img convert -c -O qcow2 "$IMAGE" "$OUT/omarchy-utm-se.qcow2"
+qemu-img convert -c -O qcow2 -o compression_type=zstd,cluster_size=2M "$IMAGE" "$OUT/omarchy-utm-se.qcow2"
 echo "$version" >"$OUT/omarchy-utm-se.version"

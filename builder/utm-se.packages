@@ -1,7 +1,6 @@
 # Installed before the Omarchy base set: the aarch64 kernel, keyrings, boot stack, guest tools, and the dev packages built from the utm-se checkout.
 archlinuxarm-keyring
 base
-base-devel
 efibootmgr
 limine
 linux-aarch64
@@ -15,4 +14,5 @@ pipewire
 qemu-guest-agent
 snapper
 spice-vdagent
+sudo
 zram-generator
