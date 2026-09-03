@@ -1,0 +1,53 @@
+#!/bin/bash
+
+set -e
+
+usage() {
+  echo "Usage: $0 <omarchy-utm-se.qcow2|Omarchy.utm> [--hvf]" >&2
+  echo "Boots the appliance disk under qemu-system-aarch64 with the devices the UTM bundle declares." >&2
+  echo "TCG emulation is the default, the closest stand-in for UTM SE; --hvf uses Apple's hypervisor instead." >&2
+  exit 1
+}
+
+(( $# >= 1 )) || usage
+disk="$1"
+shift
+accel=tcg
+cpu=cortex-a72
+if (( $# > 0 )); then
+  [[ $1 == "--hvf" ]] || usage
+  accel=hvf
+  cpu=host
+fi
+if [[ -d $disk ]]; then
+  disk=$(ls "$disk"/Data/*.qcow2 | head -n1)
+fi
+[[ -f $disk ]] || { echo "Error: $disk is not a disk image" >&2; exit 1; }
+
+firmware=""
+for candidate in "$(brew --prefix 2>/dev/null)/share/qemu" /usr/share/qemu /usr/share/edk2/aarch64; do
+  if [[ -f $candidate/edk2-aarch64-code.fd ]]; then
+    firmware="$candidate"
+    break
+  fi
+done
+[[ -n $firmware ]] || { echo "Error: no edk2-aarch64-code.fd found; install qemu" >&2; exit 1; }
+
+run_dir="${TMPDIR:-/tmp}/omarchy-utm-boot"
+mkdir -p "$run_dir"
+vars="$run_dir/efi_vars.fd"
+[[ -f $vars ]] || cp "$firmware/edk2-arm-vars.fd" "$vars"
+echo "QMP socket: $run_dir/qmp.sock   serial log: $run_dir/serial.log   ssh: localhost:2222"
+
+exec qemu-system-aarch64 \
+  -machine virt -cpu "$cpu" -accel "$accel" -smp 2 -m 2048 \
+  -drive if=pflash,format=raw,readonly=on,file="$firmware/edk2-aarch64-code.fd" \
+  -drive if=pflash,format=raw,file="$vars" \
+  -drive file="$disk",format=qcow2,if=none,id=drive0 \
+  -device virtio-blk-pci,drive=drive0 \
+  -device virtio-gpu-pci -device virtio-keyboard-pci -device virtio-mouse-pci \
+  -netdev user,id=net0,hostfwd=tcp:127.0.0.1:2222-:22 -device virtio-net-pci,netdev=net0 \
+  -device virtio-rng-pci \
+  -serial file:"$run_dir/serial.log" \
+  -qmp unix:"$run_dir/qmp.sock",server,nowait \
+  -display default

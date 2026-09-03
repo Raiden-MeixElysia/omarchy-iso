@@ -1,0 +1,9 @@
+# Base packages the appliance leaves out: desktop apps too heavy for an interpreted guest, tools with no aarch64 build, and hardware-only helpers.
+asdcontrol
+gpu-screen-recorder
+hyprland-preview-share-picker
+kdenlive
+libreoffice-fresh
+localsend
+moonlight-qt
+xournalpp

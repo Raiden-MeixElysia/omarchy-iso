@@ -143,3 +143,11 @@ Run `./bin/omarchy-iso-upload [release/omarchy.iso]`. This requires rclone confi
 ## Full release of the ISO
 
 Run `./bin/omarchy-iso-release VERSION` to create, test, sign, and upload the ISO in one flow. Add `--rc` to release an RC build instead.
+
+## Building the UTM SE appliance
+
+`./bin/omarchy-utm-make` builds Omarchy for the App Store version of UTM on iPad and iPhone: an aarch64 disk with Arch Linux ARM underneath, wrapped as a `.utm` bundle and zipped into `release/Omarchy-<version>-aarch64-utm-se.utm.zip` beside its `.sha256`. Everything Omarchy ships from its own repository comes from the aarch64 builds at [ZacharyZhang-NY/omarchy-pkgs-aarch64](https://github.com/ZacharyZhang-NY/omarchy-pkgs-aarch64), which `builder/pacman-utm-se.conf` names; the runtime is the `omarchy-dev` and `omarchy-settings-dev` pair built there from the `utm-se` branch of omarchy, as local-source ISOs do.
+
+The build runs in a privileged `linux/arm64` container: it partitions a 32 GiB sparse disk, lays out the same Btrfs subvolumes the ISO does, installs `builder/utm-se.packages` and then the Omarchy base set minus `builder/utm-se-drop.packages`, puts Limine on the UEFI fallback path, runs `omarchy-apply-system --defer-provisioning`, stages first-boot provisioning with the arm64 Node tarball, builds the boot entries, and seals the disk with an empty machine-id. The host needs Docker with a kernel that offers btrfs and loop devices (with colima: `colima ssh -- sudo modprobe btrfs`), `qemu` for the UEFI variable store template, `zip`, and `shasum`.
+
+The bundle boots with 2 cores, 2048 MiB, a `virtio-gpu-pci` display at 1280x800, VirtFS sharing, and the shared clipboard. The first boot asks for the keyboard, user, and password, the way a deferred-provisioning ISO install does.

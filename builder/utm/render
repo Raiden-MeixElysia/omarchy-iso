@@ -1,0 +1,8 @@
+#!/bin/bash
+# Renders the UTM config.plist template: render <vm-uuid> <disk-uuid> <mac> <version>
+
+set -e
+
+(( $# == 4 )) || { echo "Usage: $0 <vm-uuid> <disk-uuid> <mac> <version>" >&2; exit 1; }
+
+sed -e "s/@@VM_UUID@@/$1/" -e "s/@@DISK_UUID@@/$2/g" -e "s/@@MAC@@/$3/" -e "s/@@VERSION@@/$4/" "$(dirname "$0")/config.plist"

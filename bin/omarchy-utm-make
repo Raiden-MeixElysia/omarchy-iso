@@ -1,0 +1,66 @@
+#!/bin/bash
+
+set -e
+
+BUILD_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+RELEASE_DIR="$BUILD_ROOT/release"
+CACHE_DIR="$HOME/.cache/omarchy/utm-se"
+BUILDER_IMAGE="menci/archlinuxarm:base"
+
+if (( $# > 0 )); then
+  echo "Usage: $0" >&2
+  echo "Builds the Omarchy appliance for UTM SE into $RELEASE_DIR: a zipped .utm bundle and its sha256." >&2
+  exit 1
+fi
+
+DOCKER=(docker)
+if ! docker version &>/dev/null; then
+  DOCKER=(sudo docker)
+fi
+
+# The build partitions a loop device and mounts btrfs inside the container, so the engine's kernel must offer both.
+if ! "${DOCKER[@]}" run --rm --privileged --platform linux/arm64 "$BUILDER_IMAGE" \
+  sh -c 'grep -q btrfs /proc/filesystems && losetup -f >/dev/null'; then
+  echo "Error: the Docker engine's kernel needs btrfs and loop devices (colima: colima ssh -- sudo modprobe btrfs)" >&2
+  exit 1
+fi
+
+efi_vars=""
+for candidate in "$(brew --prefix 2>/dev/null)/share/qemu/edk2-arm-vars.fd" /usr/share/qemu/edk2-arm-vars.fd /usr/share/edk2/aarch64/QEMU_VARS.fd; do
+  if [[ -f $candidate ]]; then
+    efi_vars="$candidate"
+    break
+  fi
+done
+if [[ -z $efi_vars ]]; then
+  echo "Error: no UEFI variable store template found; install qemu" >&2
+  exit 1
+fi
+
+mkdir -p "$RELEASE_DIR" "$CACHE_DIR/pkg"
+rm -f "$RELEASE_DIR/omarchy-utm-se.qcow2" "$RELEASE_DIR/omarchy-utm-se.version"
+
+"${DOCKER[@]}" run --rm --privileged --platform linux/arm64 \
+  -v "$BUILD_ROOT/builder:/builder:ro" \
+  -v "$RELEASE_DIR:/out" \
+  -v "$CACHE_DIR/pkg:/var/cache/pacman/pkg" \
+  "$BUILDER_IMAGE" bash /builder/build-utm.sh
+
+version=$(cat "$RELEASE_DIR/omarchy-utm-se.version")
+name="Omarchy-$version-aarch64-utm-se"
+bundle="$RELEASE_DIR/$name/Omarchy.utm"
+vm_uuid=$(uuidgen | tr '[:lower:]' '[:upper:]')
+disk_uuid=$(uuidgen | tr '[:lower:]' '[:upper:]')
+mac=$(printf '02:%02X:%02X:%02X:%02X:%02X' $((RANDOM % 256)) $((RANDOM % 256)) $((RANDOM % 256)) $((RANDOM % 256)) $((RANDOM % 256)))
+
+rm -rf "$RELEASE_DIR/$name"
+mkdir -p "$bundle/Data"
+mv "$RELEASE_DIR/omarchy-utm-se.qcow2" "$bundle/Data/$disk_uuid.qcow2"
+cp "$efi_vars" "$bundle/Data/efi_vars.fd"
+"$BUILD_ROOT/builder/utm/render" "$vm_uuid" "$disk_uuid" "$mac" "$version" >"$bundle/config.plist"
+
+rm -f "$RELEASE_DIR/$name.utm.zip"
+(cd "$RELEASE_DIR/$name" && zip -qr "../$name.utm.zip" Omarchy.utm)
+(cd "$RELEASE_DIR" && shasum -a 256 "$name.utm.zip" >"$name.utm.zip.sha256")
+rm -rf "$RELEASE_DIR/$name" "$RELEASE_DIR/omarchy-utm-se.version"
+echo "Built $RELEASE_DIR/$name.utm.zip"
