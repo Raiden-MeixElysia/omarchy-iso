@@ -26,6 +26,8 @@ For local development, build the ISO from sibling checkouts:
 
 Despite the local folder name, the first argument is the Omarchy source checkout (runtime commands, configs, setup scripts, themes, shell, migrations). The installer itself lives in this ISO repo.
 
+The configurator asks for the language on its first screen: English or Simplified Chinese. Chinese reruns the installer in cage + foot, a console that draws Chinese, with Noto Sans Mono CJK unpacked from the offline mirror's `noto-fonts-cjk`. It opens on the keyboard screen, offers only keyboards with a US keymap (cage keeps a US layout) and preselects Chinese (Simplified, Pinyin); every later screen and the install progress read in Chinese. Esc there goes back to a bilingual language screen, where English returns to the VT, which applies the chosen keymap. Without a working display or the font, Chinese continues in English on the VT. Either way a Chinese install sets the target's `LANG` to `zh_CN.UTF-8` through archinstall's `locale_config`. The language never decides the region: that follows the timezone. The Chinese text lives in `OMARCHY_ZH` tables beside the English it replaces.
+
 Use `--dev` or `--rc` to build against those package channels. Both `--dev` and `--edge` select the dev packages from the edge mirror.
 
 ## Autoinstall
