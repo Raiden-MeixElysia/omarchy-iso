@@ -12,18 +12,23 @@ configure_archiso_aarch64_mkinitcpio() {
     hid_generic
     hid_multitouch
   )
-  # What a Snapdragon X1 laptop needs before its USB ports, keyboard and panel
-  # work, on a kernel that builds these as modules. Arch Linux ARM's kernel
-  # builds them in, and the ? skips one that a kernel does not have. The DSP
-  # driver stays out (see grub.cfg).
+  # What a Snapdragon X1 or X2 laptop needs before its USB ports, keyboard and
+  # panel work, on a kernel that builds these as modules. Arch Linux ARM's
+  # kernel builds them in, and the ? skips one that a kernel does not have. The
+  # DSP driver stays out (see grub.cfg).
   local -a snapdragon_platform_modules=(
     gcc-x1e80100? tcsrcc-x1e80100? dispcc-x1e80100? gpucc-x1e80100?
+    # The X2 (Glymur) chips. The Surface Laptop 8's panel also waits for the
+    # USB-C mux that thunderbolt registers.
+    gcc-glymur? tcsrcc-glymur? dispcc-glymur? gpucc-glymur?
+    pinctrl-glymur? qnoc-glymur? thunderbolt?
     pinctrl-x1e80100? qnoc-x1e80100? qcom-rpmh-regulator? fixed? spmi-pmic-arb?
     qcom-spmi-pmic? pinctrl-spmi-gpio? gpio-shared-proxy? reset-gpio?
     qcom_hwspinlock? smem? smp2p? socinfo? llcc-qcom? qcom_aoss? icc-bwmon?
     qcom-cpucp-mbox? nvmem_qfprom? nvmem_qcom-spmi-sdam? qcom-pon? rtc-pm8xxx?
     qcom_tsens? qcom-spmi-temp-alarm? i2c-qcom-geni? i2c-hid-of?
     phy-qcom-qmp-pcie? phy-qcom-qmp-combo? phy-qcom-eusb2-repeater?
+    phy-qcom-qmp-usb? phy-qcom-m31-eusb2?
     phy-snps-eusb2? phy-qcom-edp? dwc3-qcom? xhci-plat-hcd? ps883x? pmic_glink?
     pmic_glink_altmode? pci-pwrctrl-pwrseq? pwrseq-qcom-wcn?
   )
