@@ -441,6 +441,93 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  # The free-space install formats inside the configurator, before the
+  # orchestrator or archinstall runs, and cidata autoinstall never reaches the
+  # configurator. bin/omarchy-iso-test drives the real wizard instead, on a
+  # synthetic Windows-style disk (an ESP and an ext4 data partition with a
+  # marker file), and checks the pre-existing partitions survive. --install-only
+  # still runs those checks and the LUKS-sector check before it stops.
+  free-space:
+    name: "x86_64: free-space install"
+    needs: [trust, build-x86_64]
+    runs-on: ${{ needs.trust.outputs.trusted != 'true' && 'ubuntu-26.04' || 'namespace-profile-linux-amd64-16x32' }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Fetch the ISO
+        if: needs.trust.outputs.trusted == 'true'
+        uses: namespace-actions/download-artifact@7cbad919e4b0e09f17e9d6311a444ff002992b5b # v2.0.1
+        with:
+          name: iso-${{ github.run_id }}-x86_64
+
+      - name: Fetch the ISO (GitHub's runner)
+        if: needs.trust.outputs.trusted != 'true'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: iso-${{ github.run_id }}-x86_64
+
+      # The same container and tools as the install job: Arch's current QEMU
+      # and OVMF at the paths the harness expects.
+      - name: Install into the free space of a Windows-style disk
+        run: |
+          sudo chmod 0666 /dev/kvm
+          docker run --rm --device /dev/kvm -v "$PWD:/w" -w /w \
+            ghcr.io/archlinux/archlinux:latest bash -euo pipefail -c '
+              # pacman 7 fails every sync on a kernel without Landlock, which
+              # these runners have; builder/build-iso.sh does the same.
+              if ! grep -qw landlock /sys/kernel/security/lsm 2>/dev/null; then
+                printf "#!/bin/sh\nexec /usr/bin/pacman --disable-sandbox \"\$@\"\n" >/usr/local/bin/pacman
+                chmod 0755 /usr/local/bin/pacman
+              fi
+              # The tools come from our own Arch mirror first, the public ones
+              # after it. A mirror that drops one file must not fail the test:
+              # try again.
+              sed -i "1i Server = https://mirror.omarchy.org/\$repo/os/\$arch" /etc/pacman.d/mirrorlist
+              for attempt in 1 2 3; do
+                pacman -Syu --noconfirm --needed qemu-system-x86 qemu-hw-display-virtio-gpu qemu-hw-display-virtio-vga qemu-img edk2-ovmf seabios socat \
+                  imagemagick tesseract tesseract-data-eng mtools dosfstools e2fsprogs parted libisoburn acpica cpio zstd file jq openssh openssl python curl >/dev/null && break
+                [ "$attempt" -lt 3 ] || { echo "::error::the test container could not install its tools"; exit 1; }
+                echo "pacman failed, attempt $attempt of 3; trying again in 15 s"; sleep 15
+              done
+              # bin/omarchy-iso-test installs its tools through omarchy-pkg-add;
+              # they are installed above.
+              printf "#!/bin/sh\nexit 0\n" >/usr/local/bin/omarchy-pkg-add
+              chmod 0755 /usr/local/bin/omarchy-pkg-add
+              qemu-system-x86_64 --version | head -1
+              ./bin/omarchy-iso-test release/*.iso --free-space --encrypt --install-only \
+                --no-preview --memory 8192 --timeout 1800
+            '
+
+      # The harness ran as root in its container: test-runs and what QEMU
+      # wrote there belong to root until this step.
+      - name: Hand the results to the runner's user
+        if: always()
+        run: |
+          mkdir -p test-runs
+          sudo chown -R "$(id -u):$(id -g)" test-runs
+          echo "${{ job.status }}" >test-runs/status
+
+      - name: Upload test artifacts
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          # Not install-test-*: that prefix is the comment workflow's two
+          # per-architecture result artifacts, and install-test-artifacts-test.sh
+          # holds that contract.
+          name: free-space-test-${{ github.run_id }}-${{ github.run_attempt }}-x86_64
+          path: |
+            test-runs/status
+            test-runs/*/runs/*/*.png
+            test-runs/*/runs/*/*.txt
+            test-runs/*/runs/*/*.log
+            test-runs/*/runs/*/*.json
+          if-no-files-found: ignore
+          retention-days: 14
+
   install-aarch64:
     name: "aarch64: ${{ matrix.name }}"
     # Skipped with its build, which runs for a trusted author only.
