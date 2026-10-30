@@ -395,6 +395,45 @@ wait_for_screen() {
   sleep 1 # let the screen settle before typing
 }
 
+# Wait until the console shows either text, and set SCREEN_MATCHED to the one
+# it found. The wizard opens on the language picker only when the live
+# system's omarchy package carries default/i18n/locales.json; a stable ISO has
+# no such file and opens on the keyboard layout instead.
+wait_for_screen_any() {
+  local first="$1" second="$2" timeout="$3" waited=0 screen slug
+
+  while true; do
+    screen=$(ocr_screen)
+    if grep -qi "$first" <<<"$screen"; then
+      SCREEN_MATCHED="$first"
+      sleep 1
+      return 0
+    fi
+    if grep -qi "$second" <<<"$screen"; then
+      SCREEN_MATCHED="$second"
+      sleep 1
+      return 0
+    fi
+
+    if ! vm_running; then
+      echo "VM exited while waiting for screen: $first or $second" >&2
+      return 1
+    fi
+
+    if ((waited >= timeout)); then
+      slug=${first,,}
+      slug=${slug// /-}
+      slug=${slug//[^a-z0-9-]/}
+      capture_console "failure-installer-waiting-for-$slug"
+      echo "Timed out after ${timeout}s waiting for screen: $first or $second" >&2
+      return 1
+    fi
+
+    sleep 3
+    ((waited += 3))
+  done
+}
+
 # Press a key or chord, dash-separated: "ret", "ctrl-c", "ctrl-alt-f3".
 press() {
   local part json=""
@@ -772,10 +811,20 @@ drive_configurator() {
   capture_console "success-installer-00-greeter"
   press ret
 
-  # Language is the first screen, with English preselected. Ctrl+C there is the
-  # hidden entry into deferred provisioning; a normal install picks a language.
-  wait_for_screen "Language" 300
-  capture_console "success-installer-00-language"
+  # The language picker is first only when the live system's omarchy package
+  # carries default/i18n/locales.json (quattro and edge). A stable ISO has no
+  # such file, so the configurator opens on the keyboard layout instead.
+  # Ctrl+C on the language picker is the only entry into deferred
+  # provisioning, so --provision needs it.
+  wait_for_screen_any "Language" "keyboard layout" 300
+  have_language=false
+  if [[ $SCREEN_MATCHED == "Language" ]]; then
+    have_language=true
+    capture_console "success-installer-00-language"
+  elif $PROVISION; then
+    echo "This ISO has no language screen, so it cannot arm deferred provisioning" >&2
+    return 1
+  fi
 
   if $PROVISION; then
     press ctrl-c # arm "prepare for another owner"
@@ -805,7 +854,9 @@ drive_configurator() {
     return 0
   fi
 
-  press ret
+  if $have_language; then
+    press ret
+  fi
   wait_for_screen "keyboard layout" 60
   capture_console "success-installer-01-keyboard-layout"
 
