@@ -20,21 +20,21 @@ on:
   # By hand, the ISO can be built from another package channel: rc builds a
   # release candidate the way omarchy-release does (omarchy-iso-make --rc), to
   # test a fresh install of it, on both architectures, and stable the release
-  # the same way. A pull request builds x86_64 from stable and aarch64 from
-  # edge.
+  # the same way. A pull request or a merge builds both from edge: this branch
+  # is built against omarchy's quattro, which the edge packages track.
   workflow_dispatch:
     inputs:
       channel:
-        description: "Package channel the ISO is built from (a pull request: stable on x86_64, edge on aarch64)"
+        description: "Package channel the ISO is built from (a pull request or merge: edge)"
         type: choice
         options: [stable, rc, edge]
-        default: stable
+        default: edge
 
 permissions:
   contents: read
 
 concurrency:
-  group: install-test-${{ github.event.pull_request.number || github.ref }}-${{ inputs.channel || 'stable' }}
+  group: install-test-${{ github.event.pull_request.number || github.ref }}-${{ inputs.channel || 'edge' }}
   cancel-in-progress: true
 
 jobs:
@@ -110,13 +110,14 @@ jobs:
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         if: env.ARCH == 'x86_64'
 
-      # A pull request's aarch64 ISO installs what the edge channel serves, as
-      # the nightly does, on linux-omarchy: the one kernel for every aarch64
-      # board. A run by hand builds both from the channel it names. Every
-      # package comes from the package repositories, none is built here.
+      # A pull request's or merge's ISO installs what the edge channel serves,
+      # built from omarchy's quattro, as the nightly does; on aarch64 that runs
+      # linux-omarchy, the one kernel for every aarch64 board. A run by hand
+      # builds both from the channel it names. Every package comes from the
+      # package repositories, none is built here.
       - name: Build the ISO
         env:
-          CHANNEL: ${{ inputs.channel || (env.ARCH == 'aarch64' && 'edge' || 'stable') }}
+          CHANNEL: ${{ inputs.channel || 'edge' }}
         run: |
           start=$(date +%s)
           case $CHANNEL in
@@ -388,7 +389,7 @@ jobs:
           {
             echo "## Install test: x86_64, ${{ matrix.variant }}"
             echo
-            echo "Channel: \`${{ inputs.channel || 'stable' }}\`"
+            echo "Channel: \`${{ inputs.channel || 'edge' }}\`"
             echo
             if [ -f "$base/omarchy-install-timing.json" ]; then
               jq -r '"**Install:** \((.finished_at - .started_at) * 10 | round / 10) s across \(.phases | length) phases"' "$base/omarchy-install-timing.json"

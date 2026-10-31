@@ -385,6 +385,7 @@ sed -i -E '/^(linux|broadcom-wl)$/d' "$live_packages_file"
 if [[ -d /omarchy-source ]]; then
   base_pkg_lists=(/omarchy-source/install/omarchy-base.packages /omarchy-source/install/omarchy-other.packages)
   setup_form=/omarchy-source/install/provisioning/setup-form.sh
+  progress_icon=/omarchy-source/install/provisioning/progress-icon.sh
   mise_work=/omarchy-source/install/user/mise-work.sh
 else
   # Pull the same package lists out of the freshly-downloaded Omarchy runtime
@@ -407,6 +408,8 @@ else
   # actionable error below.
   bsdtar -xf "$omarchy_pkg" -C /tmp/omarchy-pkglists usr/share/omarchy/install/provisioning/setup-form.sh 2>/dev/null || true
   setup_form=/tmp/omarchy-pkglists/usr/share/omarchy/install/provisioning/setup-form.sh
+  bsdtar -xf "$omarchy_pkg" -C /tmp/omarchy-pkglists usr/share/omarchy/install/provisioning/progress-icon.sh 2>/dev/null || true
+  progress_icon=/tmp/omarchy-pkglists/usr/share/omarchy/install/provisioning/progress-icon.sh
   bsdtar -xf "$omarchy_pkg" -C /tmp/omarchy-pkglists usr/share/omarchy/install/user/mise-work.sh 2>/dev/null || true
   mise_work=/tmp/omarchy-pkglists/usr/share/omarchy/install/user/mise-work.sh
   # The aarch64 list, each platform's own and the x86_64-only one. Runtimes
@@ -531,6 +534,25 @@ if [[ ! -f $setup_form ]]; then
   exit 1
 fi
 cp "$setup_form" "$build_cache_dir/airootfs/usr/share/omarchy-iso/setup-form.sh"
+
+# The install progress screen comes from the same runtime, so the install and
+# the first-boot setup that finishes a deferred install draw the same screen. A
+# runtime predating the split ships no such file, which would leave the install
+# dashboard with nothing to draw.
+if [[ ! -f $progress_icon ]]; then
+  if [[ -d /omarchy-source ]]; then
+    echo "ERROR: the --local-source checkout ships no install/provisioning/progress-icon.sh" >&2
+    remedy="Update the checkout to a revision carrying the shared progress screen."
+  else
+    echo "ERROR: $OMARCHY_RUNTIME_PACKAGE does not ship install/provisioning/progress-icon.sh" >&2
+    remedy="Publish a runtime carrying the shared progress screen, or build with --local-source against a checkout that has it."
+  fi
+  echo "       The install dashboard draws its progress with that file, so this ISO" >&2
+  echo "       would boot into an installer that cannot show the install." >&2
+  echo "       $remedy" >&2
+  exit 1
+fi
+cp "$progress_icon" "$build_cache_dir/airootfs/usr/share/omarchy-iso/progress-icon.sh"
 
 # Omarchy installs Node lazily through mise since omacom/omarchy#15876. A
 # runtime from before it unpacks a bundled Node tarball during setup and stops
